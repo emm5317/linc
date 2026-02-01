@@ -4,34 +4,59 @@
 @export var pickup_scene: PackedScene
 @export var bullet_scene: PackedScene
 @export var max_asteroids := 30
+@export var split_count := 2
 
 @onready var player: Node2D = get_node_or_null("Player")
 @onready var hud: Node = get_node_or_null("HUD")
+@onready var menu: CanvasItem = get_node_or_null("Menu")
 @onready var spawn_timer: Timer = get_node_or_null("SpawnTimer")
 @onready var asteroid_container: Node = get_node_or_null("Asteroids")
 @onready var bullet_container: Node = get_node_or_null("Bullets")
 @onready var pickup_container: Node = get_node_or_null("Pickups")
 @onready var spawn_controller: Node = get_node_or_null("SpawnController")
 @onready var save_system: Node = get_node_or_null("SaveSystem")
+@onready var game_camera: Camera2D = get_node_or_null("GameCamera")
 
 var score := 0
 var best_score := 0
 var running := false
+var camera_base_offset := Vector2.ZERO
+var shake_duration := 0.0
+var shake_elapsed := 0.0
+var shake_strength := 0.0
 
 func _ready() -> void:
 	randomize()
+	if game_camera:
+		camera_base_offset = game_camera.offset
 	if save_system and save_system.has_method("load_best_score"):
 		best_score = int(save_system.call("load_best_score"))
 	if hud and hud.has_method("set_best"):
 		hud.call("set_best", best_score)
-	start_run()
+	if menu:
+		_show_menu()
+	else:
+		start_run()
+
+func _process(delta: float) -> void:
+	_update_camera_shake(delta)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if menu and menu.visible:
+		return
+	if event.is_action_pressed("restart"):
+		restart_run()
 
 func start_run() -> void:
+	if menu:
+		menu.visible = false
 	running = true
 	score = 0
 	_clear_container(asteroid_container)
 	_clear_container(bullet_container)
 	_clear_container(pickup_container)
+	if player and player.has_method("reset_for_run"):
+		player.call("reset_for_run")
 
 	if spawn_controller and spawn_controller.has_method("reset"):
 		spawn_controller.call("reset")
@@ -52,6 +77,8 @@ func end_run() -> void:
 		spawn_timer.stop()
 	if hud and hud.has_method("show_game_over"):
 		hud.call("show_game_over", true)
+	if player and player.has_method("set_controls_enabled"):
+		player.call("set_controls_enabled", false)
 
 func restart_run() -> void:
 	end_run()
@@ -65,13 +92,11 @@ func _on_spawn_timer_timeout() -> void:
 	if asteroid_container.get_child_count() >= max_asteroids:
 		return
 
-	var asteroid := asteroid_scene.instantiate()
-	asteroid_container.add_child(asteroid)
-	asteroid.global_position = _random_spawn_position()
-	asteroid.set("size_tier", randi() % 3)
-	asteroid.set("drift_velocity", Vector2.RIGHT.rotated(randf() * TAU) * randf_range(50.0, 130.0))
-	if asteroid.has_signal("popped"):
-		asteroid.connect("popped", Callable(self, "_on_asteroid_popped"))
+	_spawn_asteroid(
+		_random_spawn_position(),
+		0,
+		Vector2.RIGHT.rotated(randf() * TAU) * randf_range(50.0, 130.0)
+	)
 
 func _on_player_shot_requested(spawn_position: Vector2, direction: Vector2) -> void:
 	if not running:
@@ -87,11 +112,17 @@ func _on_player_shot_requested(spawn_position: Vector2, direction: Vector2) -> v
 
 func _on_player_hit() -> void:
 	if running:
+		if player:
+			_spawn_explosion_particles(player.global_position, 14, Color(1.0, 0.45, 0.2, 1.0))
+		_trigger_camera_shake(0.16, 7.0)
 		end_run()
 
-func _on_asteroid_popped(global_pos: Vector2, _size_tier: int, score_value: int) -> void:
+func _on_asteroid_popped(global_pos: Vector2, size_tier: int, score_value: int) -> void:
 	score += score_value
 	_sync_score_ui()
+	_spawn_explosion_particles(global_pos, 8, Color(1.0, 0.75, 0.28, 1.0))
+	_trigger_camera_shake(0.07, 2.6)
+	_spawn_split_asteroids(global_pos, size_tier)
 
 	if pickup_scene and pickup_container:
 		var pickup := pickup_scene.instantiate()
@@ -101,6 +132,12 @@ func _on_asteroid_popped(global_pos: Vector2, _size_tier: int, score_value: int)
 			pickup.call("set_tractor_target", player)
 		if pickup.has_signal("collected"):
 			pickup.connect("collected", Callable(self, "_on_pickup_collected"))
+
+func _on_menu_start_pressed() -> void:
+	start_run()
+
+func _on_menu_quit_pressed() -> void:
+	get_tree().quit()
 
 func _on_pickup_collected(value: int) -> void:
 	score += value
@@ -144,3 +181,108 @@ func _clear_container(container: Node) -> void:
 		return
 	for child in container.get_children():
 		child.queue_free()
+
+func _spawn_asteroid(at_position: Vector2, size_tier: int, drift_velocity: Vector2) -> void:
+	if asteroid_scene == null or asteroid_container == null:
+		return
+	var asteroid := asteroid_scene.instantiate()
+	asteroid.set("size_tier", clamp(size_tier, 0, 2))
+	asteroid.set("drift_velocity", drift_velocity)
+	asteroid_container.add_child(asteroid)
+	asteroid.global_position = at_position
+	if asteroid.has_signal("popped"):
+		asteroid.connect("popped", Callable(self, "_on_asteroid_popped"))
+
+func _spawn_split_asteroids(global_pos: Vector2, size_tier: int) -> void:
+	if size_tier >= 2:
+		return
+	if asteroid_container == null:
+		return
+	var next_tier := size_tier + 1
+	var base_direction := Vector2.RIGHT.rotated(randf() * TAU)
+	for i in split_count:
+		if asteroid_container.get_child_count() >= max_asteroids:
+			break
+		var sign := -1.0 if i == 0 else 1.0
+		var dir := base_direction.rotated(sign * randf_range(0.25, 0.6)).normalized()
+		var speed := randf_range(95.0, 160.0) + (next_tier * 20.0)
+		_spawn_asteroid(global_pos + (dir * 6.0), next_tier, dir * speed)
+
+func _show_menu() -> void:
+	if menu:
+		menu.visible = true
+	running = false
+	_clear_container(asteroid_container)
+	_clear_container(bullet_container)
+	_clear_container(pickup_container)
+	if spawn_timer:
+		spawn_timer.stop()
+	if player and player.has_method("set_controls_enabled"):
+		player.call("set_controls_enabled", false)
+	if hud and hud.has_method("set_score"):
+		hud.call("set_score", 0)
+	if hud and hud.has_method("set_best"):
+		hud.call("set_best", best_score)
+	if hud and hud.has_method("show_game_over"):
+		hud.call("show_game_over", false)
+
+func _update_camera_shake(delta: float) -> void:
+	if game_camera == null:
+		return
+	if shake_duration > 0.0 and shake_elapsed < shake_duration:
+		shake_elapsed = min(shake_elapsed + delta, shake_duration)
+		var progress := shake_elapsed / max(shake_duration, 0.001)
+		var current_strength := shake_strength * pow(1.0 - progress, 2.0)
+		game_camera.offset = camera_base_offset + Vector2(
+			round(randf_range(-current_strength, current_strength)),
+			round(randf_range(-current_strength, current_strength))
+		)
+	else:
+		game_camera.offset = camera_base_offset
+		shake_duration = 0.0
+		shake_elapsed = 0.0
+		shake_strength = 0.0
+
+func _trigger_camera_shake(duration: float, strength: float) -> void:
+	if duration <= 0.0 or strength <= 0.0:
+		return
+	if duration > shake_duration:
+		shake_duration = duration
+		shake_elapsed = 0.0
+	shake_strength = max(shake_strength, strength)
+
+func _spawn_explosion_particles(at_position: Vector2, amount: int, tint: Color) -> void:
+	var particles := GPUParticles2D.new()
+	var material := ParticleProcessMaterial.new()
+	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	material.emission_sphere_radius = 1.0
+	material.gravity = Vector3.ZERO
+	material.initial_velocity_min = 65.0
+	material.initial_velocity_max = 140.0
+	material.scale_min = 0.9
+	material.scale_max = 1.4
+	material.angle_min = -180.0
+	material.angle_max = 180.0
+	material.linear_accel_min = -20.0
+	material.linear_accel_max = 10.0
+	material.color = tint
+
+	particles.position = at_position
+	particles.amount = amount
+	particles.one_shot = true
+	particles.explosiveness = 1.0
+	particles.lifetime = 0.22
+	particles.process_material = material
+	particles.local_coords = false
+	add_child(particles)
+	particles.restart()
+	particles.emitting = true
+
+	var cleanup_timer := Timer.new()
+	cleanup_timer.one_shot = true
+	cleanup_timer.wait_time = 0.45
+	particles.add_child(cleanup_timer)
+	cleanup_timer.timeout.connect(func() -> void:
+		particles.queue_free()
+	)
+	cleanup_timer.start()

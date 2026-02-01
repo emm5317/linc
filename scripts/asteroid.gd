@@ -11,6 +11,9 @@ signal popped(global_pos: Vector2, size_tier: int, score_value: int)
 
 func _ready() -> void:
 	add_to_group(GameGlobals.GROUP_ASTEROID)
+	_apply_tier_visuals()
+	body_entered.connect(_on_body_entered)
+	area_entered.connect(_on_area_entered)
 
 func _physics_process(delta: float) -> void:
 	global_position += drift_velocity * delta
@@ -48,3 +51,31 @@ func _effective_wrap_padding() -> float:
 		var rect := hit_shape.shape as RectangleShape2D
 		return max(rect.size.x, rect.size.y) * 0.5
 	return 0.0
+
+func _on_body_entered(body: Node) -> void:
+	if body and body.is_in_group(GameGlobals.GROUP_PLAYER) and body.has_method("apply_hit"):
+		body.call("apply_hit")
+
+func _on_area_entered(area: Area2D) -> void:
+	if area and area.is_in_group(GameGlobals.GROUP_PLAYER) and area.has_method("apply_hit"):
+		area.call("apply_hit")
+
+func _apply_tier_visuals() -> void:
+	match size_tier:
+		0:
+			scale = Vector2.ONE
+			_set_collision_radius(22.0)
+		1:
+			scale = Vector2(0.7, 0.7)
+			_set_collision_radius(15.0)
+		_:
+			scale = Vector2(0.45, 0.45)
+			_set_collision_radius(10.0)
+
+func _set_collision_radius(radius: float) -> void:
+	if hit_shape == null:
+		return
+	if hit_shape.shape is CircleShape2D:
+		var circle := (hit_shape.shape as CircleShape2D).duplicate()
+		circle.radius = radius
+		hit_shape.shape = circle

@@ -1,4 +1,4 @@
-﻿[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="2"]
@@ -8,6 +8,7 @@
 [ext_resource type="PackedScene" path="res://scenes/pickup/Pickup.tscn" id="6"]
 [ext_resource type="Script" path="res://scripts/systems/spawn_controller.gd" id="7"]
 [ext_resource type="Script" path="res://scripts/systems/save_system.gd" id="8"]
+[ext_resource type="PackedScene" path="res://scenes/ui/Menu.tscn" id="9"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1")
@@ -18,7 +19,13 @@ bullet_scene = ExtResource("5")
 [node name="Player" parent="." instance=ExtResource("2")]
 position = Vector2(480, 270)
 
+[node name="GameCamera" type="Camera2D" parent="."]
+position = Vector2(480, 270)
+enabled = true
+
 [node name="HUD" parent="." instance=ExtResource("3")]
+
+[node name="Menu" parent="." instance=ExtResource("9")]
 
 [node name="SpawnTimer" type="Timer" parent="."]
 wait_time = 1.2
@@ -39,3 +46,5 @@ script = ExtResource("8")
 [connection signal="player_hit" from="Player" to="." method="_on_player_hit"]
 [connection signal="tractor_heat_changed" from="Player" to="HUD" method="set_heat"]
 [connection signal="timeout" from="SpawnTimer" to="." method="_on_spawn_timer_timeout"]
+[connection signal="start_pressed" from="Menu" to="." method="_on_menu_start_pressed"]
+[connection signal="quit_pressed" from="Menu" to="." method="_on_menu_quit_pressed"]

@@ -20,9 +20,11 @@ var controls_enabled := true
 var heat := 0.0
 var overheated := false
 var fire_timer := 0.0
+var spawn_position := Vector2.ZERO
 
 func _ready() -> void:
 	add_to_group(GameGlobals.GROUP_PLAYER)
+	spawn_position = global_position
 	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
 
 func _physics_process(delta: float) -> void:
@@ -41,6 +43,15 @@ func set_controls_enabled(value: bool) -> void:
 
 func apply_hit() -> void:
 	emit_signal("player_hit")
+
+func reset_for_run() -> void:
+	global_position = spawn_position
+	velocity = Vector2.ZERO
+	heat = 0.0
+	overheated = false
+	fire_timer = 0.0
+	controls_enabled = true
+	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
 
 func _handle_turn(delta: float) -> void:
 	var turn_input := Input.get_axis("turn_left", "turn_right")
