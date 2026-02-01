@@ -13,7 +13,7 @@
 - Player damage/game-over from asteroid contact
 - Restart key flow (`R`)
 - Menu flow start/quit behavior in full game boot
-- Export-time save path behavior for `res://data/save.cfg`
+- Verify `user://save.cfg` persists between runs in editor and export builds
 
 ## Feature Matrix (Current)
 - Movement + turn + damping: implemented

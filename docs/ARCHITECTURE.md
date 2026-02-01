@@ -8,7 +8,7 @@
 - `Pickup` owns collection scoring and optional tractor targeting.
 - `HUD` is a passive UI target updated by `Main` and `Player` signals.
 - `SpawnController` computes dynamic spawn interval from score.
-- `SaveSystem` persists best score in `res://data/save.cfg`.
+- `SaveSystem` persists best score in `user://save.cfg`.
 
 ## 2) Scene Graph (As Built)
 ### `scenes/main/Main.tscn`
@@ -69,7 +69,7 @@ Current masks in scenes:
 - Tractor area mask `8` (pickups)
 
 ## 5) Persistence
-- Path: `res://data/save.cfg`
+- Path: `user://save.cfg`
 - Section/key: `[score] best=<int>`
 - Load on `_ready` in `Main`, save when best score improves
 

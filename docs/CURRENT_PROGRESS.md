@@ -35,5 +35,5 @@ Core prototype systems are in place. The project now has functioning spawning, s
 3. Add asteroid split logic for size tiers.
 
 ## Risks
-- `res://data/save.cfg` write behavior may differ in exports and needs explicit verification.
+- `user://save.cfg` persistence should be verified in both editor and exported builds.
 - Scene node name drift can silently break dynamic `get_node_or_null` calls.

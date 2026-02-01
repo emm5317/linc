@@ -1,7 +1,7 @@
 ﻿extends Node
 class_name SaveSystem
 
-const SAVE_PATH := "res://data/save.cfg"
+const SAVE_PATH := "user://save.cfg"
 const SECTION := "score"
 const KEY_BEST := "best"
 
