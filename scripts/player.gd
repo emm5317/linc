@@ -1,4 +1,13 @@
-﻿extends CharacterBody2D
+extends CharacterBody2D
+
+const DEFAULT_INPUT_BINDINGS := {
+	"turn_left": [KeyList.A, KeyList.LEFT],
+	"turn_right": [KeyList.D, KeyList.RIGHT],
+	"thrust": [KeyList.W, KeyList.UP],
+	"shoot": [KeyList.SPACE],
+	"tractor": [KeyList.SHIFT],
+	"restart": [KeyList.R],
+}
 
 signal shot_requested(spawn_position: Vector2, direction: Vector2)
 signal player_hit()
@@ -21,13 +30,16 @@ var heat := 0.0
 var overheated := false
 var fire_timer := 0.0
 var spawn_position := Vector2.ZERO
+var tractor_coolant_grace_left := 0.0
 
 func _ready() -> void:
+	_ensure_input_actions()
 	add_to_group(GameGlobals.GROUP_PLAYER)
 	spawn_position = global_position
 	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
 
 func _physics_process(delta: float) -> void:
+	tractor_coolant_grace_left = max(tractor_coolant_grace_left - delta, 0.0)
 	if not controls_enabled:
 		return
 	_handle_turn(delta)
@@ -50,7 +62,14 @@ func reset_for_run() -> void:
 	heat = 0.0
 	overheated = false
 	fire_timer = 0.0
+	tractor_coolant_grace_left = 0.0
 	controls_enabled = true
+	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
+
+func apply_instant_cool(cooldown_grace_sec: float = GameGlobals.TRACTOR_COOLANT_GRACE_SEC) -> void:
+	heat = 0.0
+	overheated = false
+	tractor_coolant_grace_left = max(tractor_coolant_grace_left, cooldown_grace_sec)
 	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
 
 func _handle_turn(delta: float) -> void:
@@ -73,7 +92,8 @@ func _handle_fire(delta: float) -> void:
 func _handle_tractor(delta: float) -> void:
 	var active := Input.is_action_pressed("tractor") and not overheated
 	if active:
-		heat += GameGlobals.TRACTOR_HEAT_GAIN_PER_SEC * delta
+		if tractor_coolant_grace_left <= 0.0:
+			heat += GameGlobals.TRACTOR_HEAT_GAIN_PER_SEC * delta
 		if tractor_area:
 			for body in tractor_area.get_overlapping_bodies():
 				if body and body.is_in_group(GameGlobals.GROUP_PICKUP):
@@ -93,6 +113,19 @@ func _handle_tractor(delta: float) -> void:
 		overheated = false
 
 	emit_signal("tractor_heat_changed", heat, GameGlobals.TRACTOR_HEAT_MAX, overheated)
+
+func _ensure_input_actions() -> void:
+	for action_name in DEFAULT_INPUT_BINDINGS.keys():
+		var has_action := InputMap.has_action(action_name)
+		if not has_action:
+			InputMap.add_action(action_name)
+		var events := InputMap.get_action_list(action_name)
+		if events.size() == 0:
+			for scancode in DEFAULT_INPUT_BINDINGS[action_name]:
+				var ev := InputEventKey.new()
+				ev.scancode = scancode
+				ev.physical_scancode = scancode
+				InputMap.action_add_event(action_name, ev)
 
 func _wrap_self() -> void:
 	var viewport_size := get_viewport_rect().size

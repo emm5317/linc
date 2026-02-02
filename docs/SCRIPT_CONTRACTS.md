@@ -76,7 +76,7 @@ This is the source-of-truth API contract for scripts currently in the repo.
   - `set_score(value: int) -> void`
   - `set_best(value: int) -> void`
   - `set_heat(current: float, max_value: float, overheated: bool) -> void`
-  - `show_game_over(visible: bool) -> void`
+  - `show_game_over(show: bool) -> void`
 
 ## `scripts/menu.gd`
 - Extends `Control`

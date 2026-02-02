@@ -3,7 +3,7 @@
 @export var asteroid_scene: PackedScene
 @export var pickup_scene: PackedScene
 @export var bullet_scene: PackedScene
-@export var max_asteroids := 30
+@export var max_asteroids := 26
 @export var split_count := 2
 
 @onready var player: Node2D = get_node_or_null("Player")
@@ -128,6 +128,11 @@ func _on_asteroid_popped(global_pos: Vector2, size_tier: int, score_value: int) 
 		var pickup := pickup_scene.instantiate()
 		pickup_container.add_child(pickup)
 		pickup.global_position = global_pos
+		if pickup.has_method("set_pickup_type"):
+			var pickup_type := GameGlobals.PICKUP_TYPE_SCRAP
+			if randf() <= GameGlobals.PICKUP_COOLANT_DROP_CHANCE:
+				pickup_type = GameGlobals.PICKUP_TYPE_COOLANT
+			pickup.call("set_pickup_type", pickup_type)
 		if pickup.has_method("set_tractor_target") and player:
 			pickup.call("set_tractor_target", player)
 		if pickup.has_signal("collected"):
@@ -139,8 +144,13 @@ func _on_menu_start_pressed() -> void:
 func _on_menu_quit_pressed() -> void:
 	get_tree().quit()
 
-func _on_pickup_collected(value: int) -> void:
-	score += value
+func _on_pickup_collected(payload: Dictionary) -> void:
+	var pickup_type := int(payload.get("type", GameGlobals.PICKUP_TYPE_SCRAP))
+	var pickup_score := int(payload.get("score_value", 0))
+	score += pickup_score
+	if pickup_type == GameGlobals.PICKUP_TYPE_COOLANT and player and player.has_method("apply_instant_cool"):
+		var grace_sec := float(payload.get("cooldown_grace_sec", GameGlobals.TRACTOR_COOLANT_GRACE_SEC))
+		player.call("apply_instant_cool", grace_sec)
 	_sync_score_ui()
 	if spawn_controller and spawn_controller.has_method("register_score"):
 		spawn_controller.call("register_score", score)
@@ -200,12 +210,12 @@ func _spawn_split_asteroids(global_pos: Vector2, size_tier: int) -> void:
 		return
 	var next_tier := size_tier + 1
 	var base_direction := Vector2.RIGHT.rotated(randf() * TAU)
-	for i in split_count:
+	for i in range(split_count):
 		if asteroid_container.get_child_count() >= max_asteroids:
 			break
-		var sign := -1.0 if i == 0 else 1.0
-		var dir := base_direction.rotated(sign * randf_range(0.25, 0.6)).normalized()
-		var speed := randf_range(95.0, 160.0) + (next_tier * 20.0)
+		var direction_sign := -1.0 if i == 0 else 1.0
+		var dir := base_direction.rotated(direction_sign * randf_range(0.25, 0.6)).normalized()
+		var speed := randf_range(85.0, 130.0) + (next_tier * 12.0)
 		_spawn_asteroid(global_pos + (dir * 6.0), next_tier, dir * speed)
 
 func _show_menu() -> void:
@@ -231,8 +241,8 @@ func _update_camera_shake(delta: float) -> void:
 		return
 	if shake_duration > 0.0 and shake_elapsed < shake_duration:
 		shake_elapsed = min(shake_elapsed + delta, shake_duration)
-		var progress := shake_elapsed / max(shake_duration, 0.001)
-		var current_strength := shake_strength * pow(1.0 - progress, 2.0)
+		var progress: float = shake_elapsed / maxf(shake_duration, 0.001)
+		var current_strength: float = shake_strength * pow(1.0 - progress, 2.0)
 		game_camera.offset = camera_base_offset + Vector2(
 			round(randf_range(-current_strength, current_strength)),
 			round(randf_range(-current_strength, current_strength))
@@ -253,26 +263,26 @@ func _trigger_camera_shake(duration: float, strength: float) -> void:
 
 func _spawn_explosion_particles(at_position: Vector2, amount: int, tint: Color) -> void:
 	var particles := GPUParticles2D.new()
-	var material := ParticleProcessMaterial.new()
-	material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
-	material.emission_sphere_radius = 1.0
-	material.gravity = Vector3.ZERO
-	material.initial_velocity_min = 65.0
-	material.initial_velocity_max = 140.0
-	material.scale_min = 0.9
-	material.scale_max = 1.4
-	material.angle_min = -180.0
-	material.angle_max = 180.0
-	material.linear_accel_min = -20.0
-	material.linear_accel_max = 10.0
-	material.color = tint
+	var particle_material := ParticleProcessMaterial.new()
+	particle_material.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_SPHERE
+	particle_material.emission_sphere_radius = 1.0
+	particle_material.gravity = Vector3.ZERO
+	particle_material.initial_velocity_min = 65.0
+	particle_material.initial_velocity_max = 140.0
+	particle_material.scale_min = 0.9
+	particle_material.scale_max = 1.4
+	particle_material.angle_min = -180.0
+	particle_material.angle_max = 180.0
+	particle_material.linear_accel_min = -20.0
+	particle_material.linear_accel_max = 10.0
+	particle_material.color = tint
 
 	particles.position = at_position
 	particles.amount = amount
 	particles.one_shot = true
 	particles.explosiveness = 1.0
 	particles.lifetime = 0.22
-	particles.process_material = material
+	particles.process_material = particle_material
 	particles.local_coords = false
 	add_child(particles)
 	particles.restart()

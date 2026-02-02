@@ -21,6 +21,6 @@ func set_heat(current: float, max_value: float, overheated: bool) -> void:
 	if overheat_label:
 		overheat_label.visible = overheated
 
-func show_game_over(visible: bool) -> void:
+func show_game_over(show: bool) -> void:
 	if game_over_label:
-		game_over_label.visible = visible
+		game_over_label.visible = show

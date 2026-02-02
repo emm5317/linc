@@ -97,7 +97,7 @@ class TestGameplayConfigContracts(unittest.TestCase):
         main_gd = read_text("scripts/main.gd")
         self.assertIn("func _spawn_split_asteroids", main_gd)
         self.assertIn("if size_tier >= 2:", main_gd)
-        self.assertIn("for i in split_count:", main_gd)
+        self.assertRegex(main_gd, r"for i in (?:split_count|range\(split_count\))")
 
 
 if __name__ == "__main__":
